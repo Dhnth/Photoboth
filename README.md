@@ -46,6 +46,23 @@ Buka [http://localhost:3000](http://localhost:3000).
 > Kamera hanya aktif pada `localhost` atau HTTPS (batasan browser pada
 > `getUserMedia`).
 
+### SEO & domain produksi
+
+Isi `NEXT_PUBLIC_SITE_URL` dengan domain final (tanpa trailing slash) sebelum
+build agar canonical, sitemap, dan gambar Open Graph memakai URL yang benar:
+
+```bash
+NEXT_PUBLIC_SITE_URL=https://domain-kamu.com npm run build
+```
+
+Di Vercel, URL produksi biasanya terdeteksi otomatis. Setelah deploy:
+
+- Verifikasi domain di Google Search Console. Meta verifikasi sudah terpasang
+  di `app/layout.tsx`.
+- Submit `https://domain-kamu.com/sitemap.xml`.
+- `robots.txt`, manifest PWA, JSON-LD, dan gambar pratinjau sosial tersedia
+  otomatis lewat App Router.
+
 ### Perintah lain
 
 ```bash
@@ -87,14 +104,19 @@ terhadap ornamen yang menempel di tepi slot.
 
 ```
 app/
-  page.tsx                 # landing
+  page.tsx                 # landing + JSON-LD
   studio/page.tsx          # alur ambil foto + preview + unduh
   gallery/page.tsx         # galeri localStorage
   error.tsx                # error boundary route-level
   not-found.tsx            # halaman 404
   icon.svg                 # favicon RPLBox
+  icon.png                 # favicon PNG (192px)
+  apple-icon.png           # apple-touch-icon
+  manifest.ts              # manifest PWA
+  robots.ts                # robots.txt
+  sitemap.ts               # sitemap.xml
   globals.css              # design system (Tailwind v4 @theme)
-  layout.tsx               # font + Material Symbols + metadata
+  layout.tsx               # font + metadata global
   api/render/route.ts      # komposit server-side (sharp)
 components/
   CameraViewport.tsx       # kamera + chroma key realtime
@@ -111,11 +133,15 @@ lib/
   composite.ts             # komposit strip (Canvas)
   constants.ts             # template, warna frame, filter
   gallery.ts               # penyimpanan localStorage (JPEG)
+  seo.ts                   # metadata halaman + JSON-LD
+  site.ts                  # URL, judul, deskripsi, keyword situs
 scripts/                   # pipeline Fase 1
 public/
   template/                # gambar asli
   ready/                   # template bersih + slots.json + thumbs/
   fonts/                   # Material Symbols subset (self-hosted)
+  icons/                   # ikon PWA 192px & 512px
+  og-image.png             # gambar pratinjau sosial 1200×630
 ```
 
 ## API

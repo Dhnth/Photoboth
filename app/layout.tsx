@@ -1,5 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Plus_Jakarta_Sans } from "next/font/google";
+import {
+  absoluteUrl,
+  OG_IMAGE,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TITLE,
+  SITE_URL,
+  SEO_KEYWORDS,
+} from "@/lib/site";
 import "./globals.css";
 
 const bricolage = Bricolage_Grotesque({
@@ -16,27 +25,80 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const socialImage = {
+  url: absoluteUrl(OG_IMAGE.url),
+  width: OG_IMAGE.width,
+  height: OG_IMAGE.height,
+  type: "image/png",
+  alt: OG_IMAGE.alt,
+};
+
 export const metadata: Metadata = {
-  title: "RPLBox — Online Photobooth",
-  description:
-    "Photobooth online dengan green screen opsional. Ambil 4 foto, pilih frame, ganti warna, lalu unduh PNG/PDF.",
-  applicationName: "RPLBox",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: `%s · ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME, url: absoluteUrl("/") }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  keywords: SEO_KEYWORDS,
+  category: "Photography",
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false,
+  },
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
-    title: "RPLBox — Online Photobooth",
-    description:
-      "Photobooth dengan green screen opsional. Ambil foto, pilih frame, unduh PNG/PDF.",
-    siteName: "RPLBox",
     type: "website",
+    locale: "id_ID",
+    url: absoluteUrl("/"),
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [socialImage],
   },
   twitter: {
-    card: "summary",
-    title: "RPLBox — Online Photobooth",
-    description:
-      "Photobooth dengan green screen opsional. Ambil foto, pilih frame, unduh PNG/PDF.",
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [socialImage],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  verification: {
+    google: "khcQmIXw0RemfPSzTgmYUW98VRUJoF8t6k5lfgY4Fvo",
+  },
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    statusBarStyle: "default",
+  },
+  other: {
+    "apple-mobile-web-app-capable": "yes",
   },
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  colorScheme: "light",
   themeColor: "#fdf8ff",
 };
 

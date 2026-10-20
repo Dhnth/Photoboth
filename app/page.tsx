@@ -2,6 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { AppNav } from "@/components/AppNav";
 import { TEMPLATES, templateName, type Template } from "@/lib/constants";
+import { homeJsonLd, homePageMetadata } from "@/lib/seo";
+
+export const metadata = homePageMetadata;
+
+const homeJsonLdString = JSON.stringify(homeJsonLd);
 
 /* ------------------------------------------------------------------ */
 /* Data                                                               */
@@ -262,6 +267,10 @@ function MockStrip({
 export default function Home() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: homeJsonLdString }}
+      />
       <AppNav />
 
       <main className="flex flex-1 flex-col">

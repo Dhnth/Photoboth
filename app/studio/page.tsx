@@ -1,7 +1,15 @@
 import { Suspense } from "react";
 import { AppNav } from "@/components/AppNav";
 import { TEMPLATES } from "@/lib/constants";
+import { createPageMetadata } from "@/lib/seo";
 import StudioClient from "./StudioClient";
+
+export const metadata = createPageMetadata({
+  title: "Studio Photobooth",
+  description:
+    "Ambil 4 foto di studio photobooth RPLBox. Pilih dari 15 frame, atur timer, aktifkan green screen opsional, lalu simpan strip PNG atau PDF.",
+  path: "/studio",
+});
 
 type StudioSearchParams = Promise<{ frame?: string | string[] }>;
 
