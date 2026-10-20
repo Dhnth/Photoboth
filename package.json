@@ -1,17 +1,21 @@
 {
-  "name": "pboth",
+  "name": "rplbox",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "process-templates": "ts-node --project tsconfig.scripts.json scripts/run-all.ts",
+    "detect-slots": "ts-node --project tsconfig.scripts.json scripts/detect-green-screen.ts"
   },
   "dependencies": {
+    "jspdf": "^4.2.1",
     "next": "16.4.2",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
@@ -21,6 +25,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

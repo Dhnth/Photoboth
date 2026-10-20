@@ -1,36 +1,145 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RPLBox — Online Seoul 4-Cut Photobooth
 
-## Getting Started
+Photobooth 4-cut bergaya Seoul yang berjalan sepenuhnya di browser. Ambil foto di
+depan latar hijau, **chroma key realtime di Canvas** akan menghapus background
+secara instan, lalu bingkai dengan salah satu dari 15 template. Hasil akhir bisa
+diunduh sebagai **PNG** resolusi penuh atau **PDF** siap cetak (A6).
 
-First, run the development server:
+## Fitur
+
+- **Chroma key realtime** — implementasi sendiri di `lib/chromaKey.ts` (tanpa
+  library eksternal): konversi RGB→HSV, deteksi hijau, *feathering*, dan
+  *spill reduction*.
+- **15 template Seoul 4-cut** dengan slot yang terdeteksi otomatis (pipeline
+  Fase 1 dengan `sharp`). Di desktop tampil sebagai grid 3 kolom di bawah
+  kamera; di mobile dipindah ke drawer samping yang scrollable agar halaman
+  tetap ringkas.
+- **Ganti per foto** — sudah 4/4 tapi foto ke-2 kurang pas? Klik "Ganti" pada
+  foto tersebut dan ambil ulang tanpa mengulang seluruh sesi.
+- **Kamera auto-off** — setelah foto ke-4, kamera ditutup dan diganti panel
+  informasi untuk menghemat baterai. Kamera menyala lagi saat user memilih
+  "Ganti" pada salah satu foto.
+- **6 warna frame** (Classic White, Pitch Black, Pastel Lilac, Butter Peach,
+  Haru Mint, Barbie Pink) yang mengisi latar hasil cut-out.
+- **6 filter** (Normal, Warm, Cool, Mono, Vivid, Fade), diterapkan setelah
+  chroma key supaya warna hijau tetap terdeteksi akurat.
+- **Timer 3/5/10 detik** dan tombol flip kamera.
+- **Pemilih frame hemat bandwidth** — thumbnail WebP ringan (lazy load), file
+  template penuh baru diunduh saat frame dipilih, lengkap dengan animasi loading.
+- **Unduh PNG & PDF**, plus **Share** file via Web Share API.
+- **Galeri** beberapa hasil terakhir di `localStorage` (tanpa backend). Salinan
+  galeri disimpan sebagai JPEG ringan dengan batas kuota yang ditangani
+  eksplisit—item lama dibuang bila perlu, dan user diberi tahu.
+- **Error handling** untuk kamera, pemuatan frame, preview, unduhan, share, dan
+  galeri; tersedia juga halaman error/404 yang ramah.
+
+## Menjalankan
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+> Kamera hanya aktif pada `localhost` atau HTTPS (batasan browser pada
+> `getUserMedia`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Perintah lain
 
-## Learn More
+```bash
+npm run build            # build produksi
+npm start                # jalankan hasil build
+npm run lint             # eslint
+npm run process-templates # regenerasi template bersih + slots.json + thumbnail
+npm run detect-slots      # debug: lihat deteksi slot per template
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Pipeline template (Fase 1)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Skrip memproses gambar di `public/template/*.png` menjadi:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `public/ready/<nama>.png` — template dengan area slot transparan.
+- `public/ready/slots.json` — metadata slot tiap template.
+- `public/ready/thumbs/<nama>.webp` — thumbnail ringan untuk pemilih frame.
 
-## Deploy on Vercel
+```bash
+npm run process-templates
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Tahapan (`scripts/run-all.ts`):
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. `scripts/detect-green-screen.ts` — deteksi slot. Untuk template tanpa area
+   hijau, dipakai fallback deteksi area datar (`scripts/lib/flat.ts`) sehingga
+   slot putih (template 2) dan hitam (template 6) tetap terbaca.
+2. `scripts/clean-template.ts` — jadikan area slot transparan (alpha 0) tanpa
+   mengubah resolusi.
+3. `scripts/generate-metadata.ts` — tulis `slots.json`.
+4. `scripts/generate-thumbnails.ts` — buat thumbnail WebP 360 px di
+   `public/ready/thumbs` agar halaman tidak mengunduh semua template penuh.
+
+Metode deteksi: klasifikasi pixel hijau (hue 80–160, saturasi > 0.20, value >
+0.20) lalu **proyeksi baris/kolom** untuk menemukan batas slot — lebih tahan
+terhadap ornamen yang menempel di tepi slot.
+
+## Struktur proyek
+
+```
+app/
+  page.tsx                 # landing
+  studio/page.tsx          # alur ambil foto + preview + unduh
+  gallery/page.tsx         # galeri localStorage
+  error.tsx                # error boundary route-level
+  not-found.tsx            # halaman 404
+  icon.svg                 # favicon RPLBox
+  globals.css              # design system (Tailwind v4 @theme)
+  layout.tsx               # font + Material Symbols + metadata
+  api/render/route.ts      # komposit server-side (sharp)
+components/
+  CameraViewport.tsx       # kamera + chroma key realtime
+  CountdownOverlay.tsx     # countdown
+  PhotoStripPreview.tsx    # preview strip + kontrol
+  TemplateSelector.tsx     # grid template
+  TemplateDrawer.tsx       # drawer frame (mobile)
+  SessionCompletePanel.tsx # panel setelah 4/4 (kamera mati)
+  DownloadBar.tsx          # PNG / PDF / Share
+  AppNav.tsx               # navigasi
+  ui/PillButton.tsx        # tombol pill
+lib/
+  chromaKey.ts             # algoritma green screen
+  composite.ts             # komposit strip (Canvas)
+  constants.ts             # template, warna frame, filter
+  gallery.ts               # penyimpanan localStorage (JPEG)
+scripts/                   # pipeline Fase 1
+public/
+  template/                # gambar asli
+  ready/                   # template bersih + slots.json + thumbs/
+  fonts/                   # Material Symbols subset (self-hosted)
+```
+
+## API
+
+`POST /api/render` — komposit strip di server memakai `sharp` (resolusi penuh).
+Endpoint ini opsional untuk integrasi; UI studio memakai Canvas di klien.
+
+```json
+{
+  "templateId": "1",
+  "photos": ["data:image/png;base64,..."],
+  "frameColor": "#ffffff"
+}
+```
+
+Respons: `image/png`. Maksimal 4 foto (sesuai jumlah slot template), masing-masing
+berupa data URL PNG/JPEG/WebP dan maksimal 6 MB.
+
+## Tips hasil terbaik
+
+- Gunakan **latar hijau polos** (green screen) dengan pencahayaan rata.
+- **Hindari memakai baju berwarna hijau** — akan ikut terhapus oleh chroma key.
+- Makin kontras subjek dengan latar, makin rapi tepi cut-out.
+
+## Teknologi
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · Sharp ·
+Canvas API · jsPDF.
