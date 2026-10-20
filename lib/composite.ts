@@ -134,7 +134,15 @@ export async function composeStrip(
     ctx.fillStyle = frameHex;
     ctx.fillRect(slot.x, slot.y, slot.w, slot.h);
 
+    // Clip ke kotak slot. drawCover sengaja menggambar lebih besar dari slot
+    // (center crop); tanpa clip, bagian foto bisa bocor ke area transparan
+    // template lain dan terlihat seperti menimpa slot di sebelahnya.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(slot.x, slot.y, slot.w, slot.h);
+    ctx.clip();
     drawCover(ctx, photo, photo.width, photo.height, slot.x, slot.y, slot.w, slot.h);
+    ctx.restore();
   });
 
   // 3. Template di atas foto.

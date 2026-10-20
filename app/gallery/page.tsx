@@ -9,6 +9,7 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { AppNav } from "@/components/AppNav";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { templateName } from "@/lib/constants";
 import {
   galleryFileExtension,
@@ -45,17 +46,26 @@ export default function GalleryPage() {
     getGalleryServerSnapshot,
   );
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const handleRemove = useCallback((id: string) => {
-    if (!window.confirm("Hapus hasil ini dari galeri?")) return;
+    setDeleteTarget(id);
+  }, []);
+
+  const confirmRemove = useCallback(() => {
+    if (!deleteTarget) return;
 
     try {
-      removeGalleryItem(id);
+      removeGalleryItem(deleteTarget);
       setError("");
     } catch {
       setError("Gagal menghapus hasil. Coba muat ulang halaman.");
+    } finally {
+      setDeleteTarget(null);
     }
-  }, []);
+  }, [deleteTarget]);
+
+  const deleteItem = items.find((item) => item.id === deleteTarget);
 
   const handleDownload = useCallback((item: GalleryItem) => {
     const safeName = templateName(item.templateId)
@@ -180,6 +190,21 @@ export default function GalleryPage() {
           </div>
         )}
       </main>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Hapus hasil ini?"
+        description={
+          deleteItem
+            ? `Strip ${templateName(deleteItem.templateId)} akan dihapus dari galeri browser. Tindakan ini tidak bisa dibatalkan.`
+            : "Hasil ini akan dihapus dari galeri browser. Tindakan ini tidak bisa dibatalkan."
+        }
+        confirmLabel="Hapus"
+        cancelLabel="Batal"
+        tone="danger"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmRemove}
+      />
     </>
   );
 }

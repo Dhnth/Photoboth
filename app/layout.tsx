@@ -19,12 +19,12 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "RPLBox — Online Photobooth",
   description:
-    "Photobooth online bergaya Seoul 4-Cut dengan green screen auto-composite. Ambil 4 foto, pilih frame, ganti warna, lalu unduh PNG/PDF.",
+    "Photobooth online dengan green screen opsional. Ambil 4 foto, pilih frame, ganti warna, lalu unduh PNG/PDF.",
   applicationName: "RPLBox",
   openGraph: {
     title: "RPLBox — Online Photobooth",
     description:
-      "Photobooth Seoul 4-Cut dengan green screen otomatis. Ambil foto, pilih frame, unduh PNG/PDF.",
+      "Photobooth dengan green screen opsional. Ambil foto, pilih frame, unduh PNG/PDF.",
     siteName: "RPLBox",
     type: "website",
   },
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     card: "summary",
     title: "RPLBox — Online Photobooth",
     description:
-      "Photobooth Seoul 4-Cut dengan green screen otomatis. Ambil foto, pilih frame, unduh PNG/PDF.",
+      "Photobooth dengan green screen opsional. Ambil foto, pilih frame, unduh PNG/PDF.",
   },
 };
 

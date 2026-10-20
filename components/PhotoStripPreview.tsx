@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Preview strip vertikal ala Seoul 4-cut.
+ * Preview strip vertikal 4-cut.
  *
  * - Menampilkan hasil komposit nyata (template + foto + warna frame) sebagai
  *   gambar, dan di-regenerate otomatis saat ada perubahan.

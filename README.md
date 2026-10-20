@@ -1,16 +1,17 @@
-# RPLBox — Online Seoul 4-Cut Photobooth
+# RPLBox — Online 4-Cut Photobooth
 
-Photobooth 4-cut bergaya Seoul yang berjalan sepenuhnya di browser. Ambil foto di
+Photobooth yang berjalan sepenuhnya di browser. Ambil foto di
 depan latar hijau, **chroma key realtime di Canvas** akan menghapus background
 secara instan, lalu bingkai dengan salah satu dari 15 template. Hasil akhir bisa
 diunduh sebagai **PNG** resolusi penuh atau **PDF** siap cetak (A6).
 
 ## Fitur
 
-- **Chroma key realtime** — implementasi sendiri di `lib/chromaKey.ts` (tanpa
+- **Chroma key opsional** — implementasi sendiri di `lib/chromaKey.ts` (tanpa
   library eksternal): konversi RGB→HSV, deteksi hijau, *feathering*, dan
-  *spill reduction*.
-- **15 template Seoul 4-cut** dengan slot yang terdeteksi otomatis (pipeline
+  *spill reduction*. Default mati agar kamera tetap ringan; aktifkan lewat
+  toggle "Hapus background hijau" saat memakai green screen.
+- **15 template 4-cut** dengan slot yang terdeteksi otomatis (pipeline
   Fase 1 dengan `sharp`). Di desktop tampil sebagai grid 3 kolom di bawah
   kamera; di mobile dipindah ke drawer samping yang scrollable agar halaman
   tetap ringkas.

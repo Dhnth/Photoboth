@@ -64,6 +64,14 @@ export interface CameraViewportProps {
   disabled?: boolean;
   /** Warna latar panggung (warna frame) agar area transparan tidak hitam. */
   backgroundColor?: string;
+  /**
+   * Rasio viewfinder sekaligus hasil foto. Biasanya mengikuti rasio slot
+   * template aktif, jadi area yang terlihat di kamera = area yang masuk strip.
+   */
+  aspectRatio?: number;
+  /** Aktifkan pemrosesan chroma key. Default mati agar kamera tetap ringan. */
+  chromaEnabled: boolean;
+  onChromaEnabledChange: (enabled: boolean) => void;
 }
 
 type Status = "starting" | "ready" | "error";
@@ -95,6 +103,9 @@ export function CameraViewport({
   onCapture,
   disabled = false,
   backgroundColor = "#1c192c",
+  aspectRatio = 16 / 9,
+  chromaEnabled,
+  onChromaEnabledChange,
 }: CameraViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -110,6 +121,7 @@ export function CameraViewport({
   const [filter, setFilter] = useState<FilterPreset>(DEFAULT_FILTER);
   const [countdown, setCountdown] = useState(0);
   const [restartKey, setRestartKey] = useState(0);
+  const frameAspect = aspectRatio > 0 ? aspectRatio : 16 / 9;
   const pageVisible = useSyncExternalStore(
     subscribeVisibility,
     getVisibilitySnapshot,
@@ -250,9 +262,26 @@ export function CameraViewport({
         return;
       }
 
-      const scale = Math.min(1, MAX_PROCESS_WIDTH / video.videoWidth);
-      const width = Math.round(video.videoWidth * scale);
-      const height = Math.round(video.videoHeight * scale);
+      // Paksa viewfinder dan hasil foto memakai rasio slot template. Video
+      // kamera HP sering portrait/16:9, sedangkan slot strip landscape; tanpa
+      // crop terpusat, foto akan tampak "meluber" saat masuk ke slot.
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      const sourceAspect = sourceWidth / sourceHeight;
+      let cropWidth = sourceWidth;
+      let cropHeight = sourceHeight;
+
+      if (sourceAspect > frameAspect) {
+        cropWidth = sourceHeight * frameAspect;
+      } else if (sourceAspect < frameAspect) {
+        cropHeight = sourceWidth / frameAspect;
+      }
+
+      const cropX = (sourceWidth - cropWidth) / 2;
+      const cropY = (sourceHeight - cropHeight) / 2;
+      const scale = Math.min(1, MAX_PROCESS_WIDTH / cropWidth);
+      const width = Math.max(1, Math.round(cropWidth * scale));
+      const height = Math.max(1, Math.round(cropHeight * scale));
 
       if (canvas.width !== width || canvas.height !== height) {
         canvas.width = width;
@@ -273,8 +302,25 @@ export function CameraViewport({
         ctx.translate(width, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(video, 0, 0, width, height);
+      ctx.drawImage(
+        video,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
+        0,
+        0,
+        width,
+        height,
+      );
       ctx.restore();
+
+      // Saat toggle mati, cukup tampilkan video apa adanya. Ini menghindari
+      // getImageData + loop chroma key per frame, jadi gerakan kamera mulus.
+      if (!chromaEnabled) {
+        rafRef.current = requestAnimationFrame(renderFrame);
+        return;
+      }
 
       const frame = ctx.getImageData(0, 0, width, height);
       const keyed = chromaKey(frame, {
@@ -294,7 +340,7 @@ export function CameraViewport({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     };
-  }, [status, facing, pageVisible]);
+  }, [status, facing, pageVisible, frameAspect, chromaEnabled]);
 
   useEffect(() => {
     return () => {
@@ -392,7 +438,7 @@ export function CameraViewport({
             <canvas
               ref={canvasRef}
               width={640}
-              height={480}
+              height={Math.round(640 / frameAspect)}
               className="block h-auto w-full"
               style={{ filter: filter.css === "none" ? undefined : filter.css }}
             />
@@ -497,6 +543,42 @@ export function CameraViewport({
         ))}
       </div>
 
+      {/* Toggle chroma key */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl border-2 border-on-surface bg-surface-lowest p-3 hard-shadow-sm">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span
+            className={`mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-on-surface ${
+              chromaEnabled ? "bg-[#2f9e4f]" : "bg-surface-container"
+            }`}
+            aria-hidden
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-extrabold">Hapus background hijau</p>
+            <p className="text-xs font-medium leading-relaxed text-on-surface-muted">
+              Aktifkan kalau memakai green screen. Matikan kalau kamera terasa
+              patah-patah atau tidak butuh chroma key.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={chromaEnabled}
+          aria-label="Hapus background hijau"
+          onClick={() => onChromaEnabledChange(!chromaEnabled)}
+          className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border-2 border-on-surface transition-colors ${
+            chromaEnabled ? "bg-primary" : "bg-surface-container"
+          }`}
+        >
+          <span
+            className={`h-5 w-5 rounded-full border-2 border-on-surface bg-white transition-transform ${
+              chromaEnabled ? "translate-x-5" : "translate-x-0.5"
+            }`}
+            aria-hidden
+          />
+        </button>
+      </div>
+
       {/* Shutter */}
       <div className="flex flex-col items-center gap-2 pt-1">
         <PillButton
@@ -515,7 +597,9 @@ export function CameraViewport({
               : `${retaking ? "Ganti" : "Ambil"} Foto ${displayShot}`}
         </PillButton>
         <p className="text-xs font-semibold text-on-surface-muted">
-          Ambient hijau &amp; rata lebih mudah dihapus. Hindari memakai baju hijau.
+          {chromaEnabled
+            ? "Ambient hijau & rata lebih mudah dihapus. Hindari memakai baju hijau."
+            : "Green screen nonaktif. Kamera berjalan lebih ringan tanpa pemrosesan background."}
         </p>
       </div>
     </div>
