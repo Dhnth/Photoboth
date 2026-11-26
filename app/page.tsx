@@ -42,6 +42,7 @@ const WALL_OFFSETS = [
 
 const MARQUEE_ITEMS = [
   "PHOTOBOOTH",
+  "UPLOAD FOTO",
   "GREEN SCREEN",
   "15 FRAME",
   "6 WARNA",
@@ -52,8 +53,8 @@ const MARQUEE_ITEMS = [
 const STEPS = [
   {
     number: "01",
-    title: "Ambil 4 pose",
-    body: "Green screen opsional, timer 3/5/10 detik, filter, dan retake per foto.",
+    title: "Ambil atau upload",
+    body: "Jepret 4 pose langsung, atau upload dari galeri HP/komputer. Green screen opsional, timer, filter, dan retake per foto.",
   },
   {
     number: "02",
@@ -303,8 +304,9 @@ export default function Home() {
               </h1>
 
               <p className="mt-6 max-w-xl text-pretty text-base font-medium text-on-surface-muted sm:text-lg">
-                Photobooth langsung di browser. Green screen opsional, 15
-                frame, hasil PNG atau PDF. Tanpa install, tanpa bayar.
+                Photobooth langsung di browser. Ambil dengan kamera atau upload
+                fotomu, green screen opsional, 15 frame, hasil PNG atau PDF.
+                Tanpa install, tanpa bayar.
               </p>
 
               <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -666,8 +668,8 @@ export default function Home() {
                 bisa jadi milikmu.
               </h2>
               <p className="mt-3 max-w-md text-sm font-medium text-white/75 sm:text-base">
-                Pilih frame, ambil empat foto, lalu unduh. Semuanya gratis dan
-                langsung jalan di browser.
+                Pilih frame, ambil atau upload empat foto, lalu unduh. Semuanya
+                gratis dan langsung jalan di browser.
               </p>
             </div>
 

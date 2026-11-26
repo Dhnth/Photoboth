@@ -7,7 +7,7 @@ import StudioClient from "./StudioClient";
 export const metadata = createPageMetadata({
   title: "Studio Photobooth",
   description:
-    "Ambil 4 foto di studio photobooth RPLBox. Pilih dari 15 frame, atur timer, aktifkan green screen opsional, lalu simpan strip PNG atau PDF.",
+    "Ambil 4 foto langsung dengan kamera atau upload dari galeri HP/komputer. Pilih dari 15 frame, atur timer, aktifkan green screen opsional, lalu simpan strip PNG atau PDF.",
   path: "/studio",
 });
 

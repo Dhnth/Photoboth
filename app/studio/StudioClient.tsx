@@ -3,22 +3,37 @@
 /**
  * Halaman /studio — alur utama photobooth.
  *
- * Alur: pilih frame → ambil 4 foto (chroma key realtime) → kamera ditutup dan
- * diganti panel informasi → atur warna frame → unduh.
+ * Alur: pilih frame → isi 4 foto lewat kamera atau upload → kamera ditutup
+ * dan diganti panel informasi → atur warna frame → unduh.
  *
  * Foto disimpan sebagai array 4 slot (null = kosong) supaya user bisa
- * mengganti satu foto tertentu tanpa mengulang seluruh sesi. Saat slot kosong
- * kembali, kamera otomatis dipasang ulang.
+ * mengganti satu foto tertentu tanpa mengulang seluruh sesi. Slot kosong bisa
+ * diisi dengan kamera atau file dari galeri HP/komputer.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { AppNav } from "@/components/AppNav";
 import { CameraViewport } from "@/components/CameraViewport";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PhotoStripPreview } from "@/components/PhotoStripPreview";
 import { SessionCompletePanel } from "@/components/SessionCompletePanel";
+import {
+  SourceModeSwitch,
+  type PhotoSource,
+} from "@/components/SourceModeSwitch";
 import { TemplateDrawer } from "@/components/TemplateDrawer";
 import { TemplateSelector } from "@/components/TemplateSelector";
+import {
+  UploadPanel,
+  type UploadProgress,
+} from "@/components/UploadPanel";
 import { composeStrip, loadTemplateImage } from "@/lib/composite";
 import {
   DEFAULT_FRAME_COLOR,
@@ -27,6 +42,7 @@ import {
   templateName,
 } from "@/lib/constants";
 import { saveCanvasToGallery } from "@/lib/gallery";
+import { loadPhotoFile, PhotoUploadError, UPLOAD_ACCEPT } from "@/lib/photo";
 
 const EMPTY_PHOTOS: Array<HTMLCanvasElement | null> = Array.from(
   { length: SLOTS_PER_STRIP },
@@ -35,6 +51,36 @@ const EMPTY_PHOTOS: Array<HTMLCanvasElement | null> = Array.from(
 
 function thumbSrc(file: string): string {
   return `/ready/thumbs/${file.replace(/\.png$/i, ".webp")}`;
+}
+
+/**
+ * Tentukan slot tujuan untuk sejumlah file upload.
+ *
+ * Urutan prioritas: slot yang diminta (mis. tombol upload pada satu slot) →
+ * slot kosong berikutnya → slot lain dari awal (menggantikan foto lama).
+ */
+function planUploadSlots(
+  count: number,
+  preferred: number | null,
+  photos: Array<HTMLCanvasElement | null>,
+): number[] {
+  const slots: number[] = [];
+
+  const push = (index: number): void => {
+    if (index < 0 || index >= photos.length) return;
+    if (slots.includes(index)) return;
+    slots.push(index);
+  };
+
+  if (preferred !== null) push(preferred);
+  for (let i = 0; i < photos.length && slots.length < count; i += 1) {
+    if (!photos[i]) push(i);
+  }
+  for (let i = 0; i < photos.length && slots.length < count; i += 1) {
+    push(i);
+  }
+
+  return slots.slice(0, count);
 }
 
 export default function StudioClient({
@@ -56,7 +102,17 @@ export default function StudioClient({
   const [galleryError, setGalleryError] = useState("");
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [chromaEnabled, setChromaEnabled] = useState(false);
+  const [sourceMode, setSourceMode] = useState<PhotoSource>("camera");
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
+    null,
+  );
+  const [uploadError, setUploadError] = useState("");
+  const [uploadNotice, setUploadNotice] = useState("");
   const templateRequestRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadSlotRef = useRef<number | null>(null);
+  const uploadBusyRef = useRef(false);
 
   const filledCount = photos.filter(Boolean).length;
   const complete = filledCount >= SLOTS_PER_STRIP;
@@ -73,6 +129,26 @@ export default function StudioClient({
 
   const closeDrawer = useCallback(() => setTemplateDrawerOpen(false), []);
 
+  /**
+   * Cegah browser membuka file bila user melepas gambar di luar dropzone
+   * (mis. di area kamera). Dropzone tetap menangani drop-nya sendiri lewat
+   * event React; listener ini hanya mematikan perilaku default browser.
+   */
+  useEffect(() => {
+    const preventFileDrop = (event: DragEvent): void => {
+      if (event.dataTransfer?.types.includes("Files")) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("dragover", preventFileDrop);
+    window.addEventListener("drop", preventFileDrop);
+    return () => {
+      window.removeEventListener("dragover", preventFileDrop);
+      window.removeEventListener("drop", preventFileDrop);
+    };
+  }, []);
+
   const handleCapture = useCallback(
     (photo: HTMLCanvasElement) => {
       const target = retakeSlot ?? photos.findIndex((item) => !item);
@@ -85,6 +161,8 @@ export default function StudioClient({
       });
       setRetakeSlot(null);
       setGalleryError("");
+      setUploadError("");
+      setUploadNotice("");
 
       // Kamera akan ditutup otomatis setelah ini; bawa user ke panel hasil.
       if (filledCount + 1 >= SLOTS_PER_STRIP) {
@@ -112,6 +190,8 @@ export default function StudioClient({
       const request = ++templateRequestRef.current;
       setPendingTemplate(templateId);
       setTemplateError("");
+      setUploadError("");
+      setUploadNotice("");
 
       loadTemplateImage(template)
         .then(() => {
@@ -139,7 +219,10 @@ export default function StudioClient({
       return next;
     });
     setRetakeSlot(index);
+    setSourceMode("camera");
     setGalleryError("");
+    setUploadError("");
+    setUploadNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -152,6 +235,8 @@ export default function StudioClient({
     setPhotos([...EMPTY_PHOTOS]);
     setRetakeSlot(null);
     setGalleryError("");
+    setUploadError("");
+    setUploadNotice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
@@ -188,6 +273,133 @@ export default function StudioClient({
     }
   }, [galleryBusy, photos, selectedTemplate, frameColor, router]);
 
+  /**
+   * Proses file upload secara berurutan supaya progress terlihat dan memori
+   * tetap rendah. File divalidasi di lib/photo; kegagalan satu file tidak
+   * membatalkan file lain.
+   */
+  const handleUploadFiles = useCallback(
+    async (files: File[], preferredSlot: number | null = null) => {
+      if (uploadBusyRef.current || files.length === 0) return;
+
+      const preferred = preferredSlot ?? retakeSlot;
+      const targets = planUploadSlots(files.length, preferred, photos);
+      if (targets.length === 0) return;
+
+      const usableFiles = files.slice(0, targets.length);
+      const nextPhotos = [...photos];
+      const failures: string[] = [];
+      let succeeded = 0;
+      let replaced = 0;
+
+      uploadBusyRef.current = true;
+      setUploadBusy(true);
+      setUploadProgress({ done: 0, total: usableFiles.length });
+      setUploadError("");
+      setUploadNotice("");
+      setGalleryError("");
+
+      try {
+        for (let i = 0; i < usableFiles.length; i += 1) {
+          const file = usableFiles[i];
+          const slot = targets[i];
+          const slotMeta = selectedTemplateMeta?.slots[slot];
+          const aspect = slotMeta ? slotMeta.w / slotMeta.h : captureAspect;
+
+          try {
+            const hadPhoto = Boolean(nextPhotos[slot]);
+            nextPhotos[slot] = await loadPhotoFile(file, aspect);
+            succeeded += 1;
+            if (hadPhoto) replaced += 1;
+          } catch (error) {
+            failures.push(
+              error instanceof PhotoUploadError
+                ? error.message
+                : `"${file.name}" gagal diproses. Coba file lain.`,
+            );
+          }
+
+          setUploadProgress({ done: i + 1, total: usableFiles.length });
+        }
+
+        if (succeeded > 0) {
+          setPhotos(nextPhotos);
+          setRetakeSlot(null);
+        }
+
+        const notices: string[] = [];
+        if (succeeded > 0) {
+          notices.push(`${succeeded} foto berhasil dimuat.`);
+        }
+        if (replaced > 0 && succeeded > 0) {
+          notices.push(`${replaced} foto lama diganti.`);
+        }
+        if (files.length > usableFiles.length) {
+          notices.push(
+            `Hanya ${usableFiles.length} foto dipakai karena strip punya ${SLOTS_PER_STRIP} slot.`,
+          );
+        }
+        if (notices.length > 0) setUploadNotice(notices.join(" "));
+
+        if (failures.length > 0) {
+          const shown = failures.slice(0, 2).join(" ");
+          setUploadError(
+            failures.length > 2
+              ? `${shown} Dan ${failures.length - 2} foto lain gagal.`
+              : shown,
+          );
+        }
+
+        const wasComplete = filledCount >= SLOTS_PER_STRIP;
+        const nowComplete =
+          nextPhotos.filter(Boolean).length >= SLOTS_PER_STRIP;
+        if (!wasComplete && nowComplete) {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      } finally {
+        uploadBusyRef.current = false;
+        setUploadBusy(false);
+        setUploadProgress(null);
+      }
+    },
+    [
+      captureAspect,
+      filledCount,
+      photos,
+      retakeSlot,
+      selectedTemplateMeta,
+    ],
+  );
+
+  /** Buka file picker; `slot` tertentu atau slot kosong berikutnya. */
+  const openFilePicker = useCallback((slot?: number) => {
+    if (uploadBusyRef.current) return;
+    uploadSlotRef.current = slot ?? null;
+
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.value = "";
+    input.click();
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      const target = uploadSlotRef.current;
+      uploadSlotRef.current = null;
+      event.target.value = "";
+
+      if (files.length > 0) void handleUploadFiles(files, target);
+    },
+    [handleUploadFiles],
+  );
+
+  const handleSourceModeChange = useCallback((mode: PhotoSource) => {
+    setSourceMode(mode);
+    setUploadError("");
+    setUploadNotice("");
+  }, []);
+
   return (
     <>
       <AppNav />
@@ -197,20 +409,88 @@ export default function StudioClient({
           <h1 className="text-3xl font-extrabold">Studio</h1>
           <p className="text-sm font-medium text-on-surface-muted">
             {retakeSlot !== null
-              ? `Mode ganti foto ${retakeSlot + 1}. Ambil foto baru — slot lain tetap aman.`
+              ? `Mode ganti foto ${retakeSlot + 1}. Ambil foto baru atau upload — slot lain tetap aman.`
               : complete
                 ? "Sesi selesai. Kamera dimatikan untuk hemat baterai—atur frame lalu unduh hasilnya."
-                : `Ambil ${SLOTS_PER_STRIP - filledCount} foto lagi untuk menyelesaikan strip.`}
+                : sourceMode === "upload"
+                  ? `Upload ${SLOTS_PER_STRIP - filledCount} foto lagi. Bisa satu-satu atau beberapa sekaligus.`
+                  : `Ambil ${SLOTS_PER_STRIP - filledCount} foto lagi untuk menyelesaikan strip.`}
           </p>
+
+          {uploadBusy && (complete || sourceMode === "camera") ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className="flex items-center gap-2 rounded-xl border-2 border-on-surface bg-flash px-3 py-2 text-xs font-extrabold"
+            >
+              <span
+                className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-on-surface border-t-transparent"
+                aria-hidden
+              />
+              Memproses {uploadProgress?.done ?? 0} dari{" "}
+              {uploadProgress?.total ?? "…"} foto…
+            </p>
+          ) : null}
+
+          {uploadError ? (
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border-2 border-primary bg-surface-low px-3 py-2 text-xs font-semibold leading-relaxed text-primary"
+            >
+              <span
+                className="material-symbols-outlined shrink-0"
+                style={{ fontSize: "1rem" }}
+                aria-hidden
+              >
+                image_not_supported
+              </span>
+              <span className="min-w-0">{uploadError}</span>
+            </p>
+          ) : null}
+
+          {uploadNotice ? (
+            <p
+              role="status"
+              className="flex items-start gap-2 rounded-xl border-2 border-on-surface/20 bg-surface-low px-3 py-2 text-xs font-semibold leading-relaxed text-on-surface-muted"
+            >
+              <span
+                className="material-symbols-outlined shrink-0 text-primary"
+                style={{ fontSize: "1rem" }}
+                aria-hidden
+              >
+                celebration
+              </span>
+              <span className="min-w-0">{uploadNotice}</span>
+            </p>
+          ) : null}
         </div>
 
         {/* Grid utama */}
         <div className="grid grid-cols-12 gap-6">
           <section className="col-span-12 flex flex-col gap-6 lg:col-span-7">
             <div className="flex flex-col gap-4">
-              <h2 className="text-lg font-extrabold">
-                {complete ? "Sesi Selesai" : "Kamera"}
-              </h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-lg font-extrabold">
+                  {complete
+                    ? "Sesi Selesai"
+                    : sourceMode === "camera"
+                      ? "Kamera"
+                      : "Upload Foto"}
+                </h2>
+                {!complete ? (
+                  <span className="text-[10px] font-extrabold uppercase tracking-wide text-on-surface-muted">
+                    Pilih sumber
+                  </span>
+                ) : null}
+              </div>
+
+              {!complete ? (
+                <SourceModeSwitch
+                  value={sourceMode}
+                  onChange={handleSourceModeChange}
+                  disabled={uploadBusy}
+                />
+              ) : null}
 
               {complete ? (
                 <SessionCompletePanel
@@ -220,7 +500,7 @@ export default function StudioClient({
                   galleryBusy={galleryBusy}
                   error={galleryError}
                 />
-              ) : (
+              ) : sourceMode === "camera" ? (
                 <CameraViewport
                   nextSlot={targetSlot}
                   totalShots={SLOTS_PER_STRIP}
@@ -231,6 +511,18 @@ export default function StudioClient({
                   aspectRatio={captureAspect}
                   chromaEnabled={chromaEnabled}
                   onChromaEnabledChange={setChromaEnabled}
+                />
+              ) : (
+                <UploadPanel
+                  nextSlot={targetSlot}
+                  totalShots={SLOTS_PER_STRIP}
+                  retaking={retakeSlot !== null}
+                  photos={photos}
+                  aspectRatio={captureAspect}
+                  busy={uploadBusy}
+                  progress={uploadProgress}
+                  onPickFiles={openFilePicker}
+                  onDropFiles={handleUploadFiles}
                 />
               )}
             </div>
@@ -299,6 +591,9 @@ export default function StudioClient({
                 frameColor={frameColor}
                 onFrameColorChange={setFrameColor}
                 onRetake={handleRetake}
+                onUpload={openFilePicker}
+                onDropFiles={handleUploadFiles}
+                uploadBusy={uploadBusy}
               />
             </div>
           </aside>
@@ -322,6 +617,18 @@ export default function StudioClient({
         cancelLabel="Batal"
         onCancel={() => setResetConfirmOpen(false)}
         onConfirm={confirmReset}
+      />
+
+      {/* Input file bersama: dipicu dari tombol upload mana pun. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={UPLOAD_ACCEPT}
+        multiple
+        tabIndex={-1}
+        aria-hidden
+        className="sr-only"
+        onChange={handleFileInputChange}
       />
     </>
   );

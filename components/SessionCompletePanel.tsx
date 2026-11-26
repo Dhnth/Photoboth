@@ -76,7 +76,7 @@ export function SessionCompletePanel({
       </div>
 
       <p className="text-xs font-semibold text-white/55">
-        Mau ganti satu foto? Klik tombol Ganti di preview.
+        Mau ganti satu foto? Pakai ikon kamera atau upload di preview.
       </p>
 
       {error ? (

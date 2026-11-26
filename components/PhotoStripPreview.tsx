@@ -6,13 +6,19 @@
  * - Menampilkan hasil komposit nyata (template + foto + warna frame) sebagai
  *   gambar, dan di-regenerate otomatis saat ada perubahan.
  * - Slot kosong tampil sebagai placeholder abu-abu.
- * - Tiap foto punya tombol "Ganti" untuk mengambil ulang foto tersebut saja
- *   tanpa menghapus foto lain.
+ * - Tiap foto punya dua aksi: ambil ulang lewat kamera atau upload file.
+ * - File bisa ditarik & dilepas langsung ke slot tertentu (desktop).
  * - User bisa ganti warna frame (6 swatch); preview live update.
  * - Kalau komposit gagal (mis. template gagal diunduh), tampil pesan + tombol
  *   coba lagi—bukan spinner tanpa akhir.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import Image from "next/image";
 import {
   FRAME_COLORS,
@@ -21,27 +27,8 @@ import {
   templateName,
 } from "@/lib/constants";
 import { composeStrip } from "@/lib/composite";
+import { makePhotoThumbnail } from "@/lib/photo";
 import { DownloadBar } from "@/components/DownloadBar";
-
-/** Buat thumbnail kecil (JPEG, latar putih) dari canvas foto. */
-function makeThumbnail(canvas: HTMLCanvasElement): string {
-  if (typeof document === "undefined") return "";
-  try {
-    const width = 240;
-    const height = Math.max(1, Math.round((canvas.height / canvas.width) * width));
-    const thumb = document.createElement("canvas");
-    thumb.width = width;
-    thumb.height = height;
-    const ctx = thumb.getContext("2d");
-    if (!ctx) return "";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.drawImage(canvas, 0, 0, width, height);
-    return thumb.toDataURL("image/jpeg", 0.8);
-  } catch {
-    return "";
-  }
-}
 
 export interface PhotoStripPreviewProps {
   photos: Array<HTMLCanvasElement | null>;
@@ -50,6 +37,12 @@ export interface PhotoStripPreviewProps {
   onFrameColorChange: (hex: string) => void;
   /** Minta ambil ulang foto pada index tertentu (0-based). */
   onRetake: (index: number) => void;
+  /** Buka file picker untuk slot tertentu (0-based). */
+  onUpload: (index: number) => void;
+  /** Terima file yang ditarik & dilepas ke slot tertentu. */
+  onDropFiles?: (files: File[], index: number) => void;
+  /** Nonaktifkan aksi upload saat file sedang diproses. */
+  uploadBusy?: boolean;
 }
 
 export function PhotoStripPreview({
@@ -58,10 +51,14 @@ export function PhotoStripPreview({
   frameColor,
   onFrameColorChange,
   onRetake,
+  onUpload,
+  onDropFiles,
+  uploadBusy = false,
 }: PhotoStripPreviewProps) {
   const [previewUrl, setPreviewUrl] = useState("");
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
+  const [dragSlot, setDragSlot] = useState<number | null>(null);
   const sequenceRef = useRef(0);
 
   const template = useMemo(
@@ -70,9 +67,19 @@ export function PhotoStripPreview({
   );
 
   const thumbnails = useMemo(
-    () => photos.map((photo) => (photo ? makeThumbnail(photo) : null)),
+    () => photos.map((photo) => (photo ? makePhotoThumbnail(photo) : null)),
     [photos],
   );
+
+  const handleDrop = (event: DragEvent, index: number): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragSlot(null);
+    if (uploadBusy || !onDropFiles) return;
+
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    if (files.length > 0) onDropFiles(files, index);
+  };
 
   // Regenerasi preview (di-debounce) setiap opsi berubah.
   useEffect(() => {
@@ -167,20 +174,60 @@ export function PhotoStripPreview({
         )}
       </div>
 
-      {/* Foto per slot + ganti foto */}
+      {/* Foto per slot: ambil ulang atau upload */}
       <div className="rounded-2xl border-2 border-on-surface bg-surface-lowest p-4 hard-shadow-sm">
-        <p className="mb-3 flex items-center justify-between gap-2 text-xs font-extrabold uppercase tracking-wide text-on-surface-muted">
-          Foto
-          <span className="font-bold normal-case tracking-normal">
-            Klik Ganti untuk ambil ulang
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-on-surface-muted">
+            Foto
+          </p>
+          <span className="text-right text-[10px] font-bold normal-case tracking-normal text-on-surface-muted">
+            Ikon kamera = ambil ulang
+            <br className="sm:hidden" /> · ikon upload = pilih file
           </span>
-        </p>
-        <div className="grid grid-cols-4 gap-2">
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {photos.map((photo, index) => {
             const thumb = thumbnails[index];
+            const isDropTarget = dragSlot === index;
+
             return (
-              <div key={index} className="flex flex-col gap-1">
-                <div className="relative overflow-hidden rounded-lg border-2 border-on-surface bg-surface-container">
+              <div
+                key={index}
+                className={`flex flex-col gap-1 transition-transform ${
+                  isDropTarget ? "-translate-y-0.5" : ""
+                }`}
+                onDragEnter={(event) => {
+                  if (!onDropFiles || uploadBusy) return;
+                  event.preventDefault();
+                  setDragSlot(index);
+                }}
+                onDragOver={(event) => {
+                  if (!onDropFiles || uploadBusy) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                  setDragSlot(index);
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    event.currentTarget.contains(
+                      event.relatedTarget as Node | null,
+                    )
+                  ) {
+                    return;
+                  }
+                  setDragSlot((current) =>
+                    current === index ? null : current,
+                  );
+                }}
+                onDrop={(event) => handleDrop(event, index)}
+              >
+                <div
+                  className={`relative overflow-hidden rounded-lg border-2 bg-surface-container transition-colors ${
+                    isDropTarget
+                      ? "border-primary ring-2 ring-primary/30"
+                      : "border-on-surface"
+                  }`}
+                >
                   {thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -189,39 +236,93 @@ export function PhotoStripPreview({
                       className="block h-auto w-full"
                     />
                   ) : (
-                    <div className="flex aspect-video items-center justify-center text-on-surface-muted">
+                    <button
+                      type="button"
+                      disabled={uploadBusy}
+                      onClick={() => onUpload(index)}
+                      aria-label={`Upload foto untuk slot ${index + 1}`}
+                      className="flex aspect-video w-full flex-col items-center justify-center gap-0.5 text-on-surface-muted transition-colors hover:bg-surface-low hover:text-primary disabled:pointer-events-none disabled:opacity-50"
+                    >
                       <span
                         className="material-symbols-outlined"
                         style={{ fontSize: "1.25rem" }}
                         aria-hidden
                       >
-                        photo_camera
+                        add_a_photo
                       </span>
-                    </div>
+                      <span className="text-[9px] font-extrabold uppercase">
+                        Upload
+                      </span>
+                    </button>
                   )}
-                  <span className="absolute left-1 top-1 rounded-full border-2 border-on-surface bg-white/90 px-1.5 text-[9px] font-extrabold">
+
+                  <span className="pointer-events-none absolute left-1 top-1 rounded-full border-2 border-on-surface bg-white/90 px-1.5 text-[9px] font-extrabold">
                     {index + 1}
                   </span>
+
+                  {isDropTarget ? (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/25">
+                      <span
+                        className="material-symbols-outlined text-white"
+                        style={{ fontSize: "1.5rem" }}
+                        aria-hidden
+                      >
+                        file_download
+                      </span>
+                    </span>
+                  ) : null}
                 </div>
-                <button
-                  type="button"
-                  disabled={!photo}
-                  onClick={() => onRetake(index)}
-                  className="inline-flex h-7 items-center justify-center gap-0.5 rounded-full border-2 border-on-surface bg-surface-lowest text-[10px] font-bold hard-shadow-sm transition-all active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"
-                >
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: "0.875rem" }}
-                    aria-hidden
+
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    disabled={!photo}
+                    onClick={() => onRetake(index)}
+                    aria-label={`Ambil ulang foto ${index + 1} dengan kamera`}
+                    title="Ambil ulang dengan kamera"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-full border-2 border-on-surface bg-surface-lowest px-1 hard-shadow-sm transition-all active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"
                   >
-                    refresh
-                  </span>
-                  Ganti
-                </button>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "0.875rem" }}
+                      aria-hidden
+                    >
+                      photo_camera
+                    </span>
+                    <span className="text-[10px] font-bold sm:hidden">
+                      Ambil
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={uploadBusy}
+                    onClick={() => onUpload(index)}
+                    aria-label={`Upload foto untuk slot ${index + 1}`}
+                    title="Upload foto"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-full border-2 border-on-surface bg-primary px-1 text-white hard-shadow-sm transition-all active:translate-y-0.5 active:shadow-none disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none"
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: "0.875rem" }}
+                      aria-hidden
+                    >
+                      photo_library
+                    </span>
+                    <span className="text-[10px] font-bold sm:hidden">
+                      Upload
+                    </span>
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
+        {onDropFiles ? (
+          <p className="mt-3 hidden text-[10px] font-semibold text-on-surface-muted sm:block">
+            Tips: tarik file gambar langsung ke salah satu slot untuk upload
+            cepat.
+          </p>
+        ) : null}
       </div>
 
       {/* Warna frame */}
@@ -263,7 +364,8 @@ export function PhotoStripPreview({
         </p>
       ) : (
         <p className="text-xs font-semibold text-on-surface-muted">
-          Kamu juga bisa mengganti satu foto lewat tombol Ganti di atas.
+          Kamu juga bisa mengganti satu foto lewat ikon kamera atau upload di
+          atas.
         </p>
       )}
     </div>

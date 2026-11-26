@@ -15,8 +15,14 @@ diunduh sebagai **PNG** resolusi penuh atau **PDF** siap cetak (A6).
   Fase 1 dengan `sharp`). Di desktop tampil sebagai grid 3 kolom di bawah
   kamera; di mobile dipindah ke drawer samping yang scrollable agar halaman
   tetap ringkas.
-- **Ganti per foto** — sudah 4/4 tapi foto ke-2 kurang pas? Klik "Ganti" pada
-  foto tersebut dan ambil ulang tanpa mengulang seluruh sesi.
+- **Upload foto, bukan cuma kamera** — pilih JPG/PNG/WebP/GIF/AVIF dari galeri HP
+  atau komputer, satu per satu maupun beberapa sekaligus. Ada dropzone besar,
+  upload per slot, drag & drop langsung ke preview, dan tempel screenshot
+  dengan Ctrl+V. Foto otomatis dipotong tengah mengikuti rasio frame dan
+  diperkecil agar tetap ringan.
+- **Ganti per foto** — sudah 4/4 tapi foto ke-2 kurang pas? Klik ikon kamera
+  untuk ambil ulang atau ikon upload untuk memilih file, tanpa mengulang
+  seluruh sesi.
 - **Kamera auto-off** — setelah foto ke-4, kamera ditutup dan diganti panel
   informasi untuk menghemat baterai. Kamera menyala lagi saat user memilih
   "Ganti" pada salah satu foto.
@@ -120,6 +126,8 @@ app/
   api/render/route.ts      # komposit server-side (sharp)
 components/
   CameraViewport.tsx       # kamera + chroma key realtime
+  SourceModeSwitch.tsx     # pilih kamera atau upload
+  UploadPanel.tsx          # dropzone upload + isi per slot
   CountdownOverlay.tsx     # countdown
   PhotoStripPreview.tsx    # preview strip + kontrol
   TemplateSelector.tsx     # grid template
@@ -131,6 +139,7 @@ components/
 lib/
   chromaKey.ts             # algoritma green screen
   composite.ts             # komposit strip (Canvas)
+  photo.ts                 # validasi upload, crop, resize, thumbnail
   constants.ts             # template, warna frame, filter
   gallery.ts               # penyimpanan localStorage (JPEG)
   seo.ts                   # metadata halaman + JSON-LD
